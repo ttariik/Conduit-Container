@@ -1,0 +1,57 @@
+services:
+  backend:
+    container_name: conduit-backend
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        PYTHON_VERSION: ${BACKEND_PYTHON_VERSION:-3.11-slim}
+    env_file:
+      - .env
+    environment:
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-*}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me}
+      DATABASE_URL: ${BACKEND_DATABASE_URL:-sqlite:////app/data/db.sqlite3}
+      DJANGO_MANAGEPY_MIGRATE: ${DJANGO_MANAGEPY_MIGRATE:-1}
+      DJANGO_MANAGEPY_COLLECTSTATIC: ${DJANGO_MANAGEPY_COLLECTSTATIC:-1}
+      DJANGO_SUPERUSER_EMAIL: ${DJANGO_SUPERUSER_EMAIL:-}
+      DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-admin}
+      DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD:-}
+    volumes:
+      - backend_data:/app/data
+      - backend_logs:/var/log/conduit
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8000/api/tags/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    container_name: conduit-frontend
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        FRONTEND_BUILD_CONFIGURATION: ${FRONTEND_BUILD_CONFIGURATION:-production}
+    env_file:
+      - .env
+    environment:
+      API_URL: ${FRONTEND_API_URL:-http://localhost:8000/api}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-8282}:8080"
+    volumes:
+      - frontend_logs:/var/log/nginx
+    restart: unless-stopped
+
+volumes:
+  backend_data:
+  backend_logs:
+  frontend_logs:
+

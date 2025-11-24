@@ -1,0 +1,56 @@
+# syntax=docker/dockerfile:1.7-labs
+ARG PYTHON_VERSION=3.11-slim
+
+FROM python:${PYTHON_VERSION} AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /srv/app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy backend files first
+COPY backend/ /srv/app
+
+# Install dependencies if requirements.txt exists
+RUN pip install --upgrade pip setuptools wheel \
+    && if [ -f /srv/app/requirements.txt ]; then \
+         pip install --prefix=/python -r /srv/app/requirements.txt; \
+       else \
+         echo "No requirements.txt detected; skipping dependency install"; \
+       fi
+
+FROM python:${PYTHON_VERSION} AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DJANGO_SETTINGS_MODULE=conduit.settings \
+    DJANGO_ALLOWED_HOSTS="*" \
+    DJANGO_SECRET_KEY=changeme \
+    DATABASE_URL=sqlite:////app/data/db.sqlite3
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /python /usr/local
+COPY --from=builder /srv/app /app
+COPY docker/backend/entrypoint.sh /entrypoint.sh
+COPY docker/backend/gunicorn.conf.py /app/docker/backend/gunicorn.conf.py
+
+RUN chmod +x /entrypoint.sh && mkdir -p /var/log/conduit
+
+EXPOSE 8000
+VOLUME ["/app/data", "/var/log/conduit"]
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=5 \
+  CMD curl -f http://127.0.0.1:8000/api/tags/ || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["gunicorn", "--config", "docker/backend/gunicorn.conf.py", "conduit.wsgi:application"]
+
