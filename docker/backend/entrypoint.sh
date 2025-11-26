@@ -13,13 +13,8 @@ if [ "${DJANGO_MANAGEPY_COLLECTSTATIC:-1}" = "1" ]; then
   python manage.py collectstatic --noinput
 fi
 
-if [ -n "${DJANGO_SUPERUSER_EMAIL:-}" ] && [ -n "${DJANGO_SUPERUSER_PASSWORD:-}" ]; then
-  echo "[entrypoint] Ensuring admin user exists..."
-  python manage.py createsuperuser --noinput \
-    --email "${DJANGO_SUPERUSER_EMAIL}" \
-    --username "${DJANGO_SUPERUSER_USERNAME:-admin}" \
-    || true
-fi
+echo "[entrypoint] Ensuring admin user exists..."
+python manage.py ensure_superuser
 
 exec "$@"
 
