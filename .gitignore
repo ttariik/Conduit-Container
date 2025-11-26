@@ -22,3 +22,6 @@ backend/*.sqlite3
 .vscode/
 tmp/
 
+# Runtime-generated frontend environment configuration
+frontend/src/assets/env-config.js
+

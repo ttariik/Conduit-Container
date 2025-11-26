@@ -3,6 +3,11 @@ set -eu
 
 cd /app
 
+if [ "${DJANGO_MANAGEPY_MAKEMIGRATIONS:-0}" = "1" ]; then
+  echo "[entrypoint] Creating missing migrations..."
+  python manage.py makemigrations --noinput
+fi
+
 if [ "${DJANGO_MANAGEPY_MIGRATE:-1}" = "1" ]; then
   echo "[entrypoint] Applying database migrations..."
   python manage.py migrate --noinput

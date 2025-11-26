@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /srv/app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential curl \
+    && apt-get install -y --no-install-recommends build-essential curl libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy backend files first
@@ -17,8 +17,8 @@ COPY backend/ /srv/app
 
 # Install dependencies if requirements.txt exists
 RUN pip install --upgrade pip setuptools wheel \
-    && if [ -f /srv/app/requirements.txt ]; then \
-         pip install --prefix=/python -r /srv/app/requirements.txt; \
+    && if [ -f requirements.txt ]; then \
+         pip install --prefix=/python -r requirements.txt; \
        else \
          echo "No requirements.txt detected; skipping dependency install"; \
        fi
@@ -35,7 +35,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /python /usr/local

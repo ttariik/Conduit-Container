@@ -23,15 +23,18 @@ LABEL org.opencontainers.image.title="Conduit Frontend" \
 ENV FRONTEND_PORT=8080 \
     API_URL=https://conduit.productionready.io/api
 
-RUN apk add --no-cache curl
-
 COPY docker/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker/frontend/docker-entrypoint.sh /docker-entrypoint.sh
 COPY --from=build /srv/app/dist/angular-conduit /usr/share/nginx/html
+
+RUN chmod +x /docker-entrypoint.sh \
+    && mkdir -p /usr/share/nginx/html/assets
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:8080/healthz || exit 1
+  CMD wget --spider -q http://127.0.0.1:8080/ || exit 1
 
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
 

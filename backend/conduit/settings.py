@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/1.10/ref/settings/
 """
 
 import os
+import dj_database_url
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -20,12 +21,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # See https://docs.djangoproject.com/en/1.10/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = '2^f+3@v7$v1f8yt0!s)3-1t$)tlp+xm17=*g))_xoi&&9m#2a&'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'insecure-default-key-change-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = ['*']  # Allow all hosts for development
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',') if os.environ.get('DJANGO_ALLOWED_HOSTS', '*') != '*' else ['*']
 
 
 # Application definition
@@ -83,11 +84,13 @@ WSGI_APPLICATION = 'conduit.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/1.10/ref/settings/#databases
 
+# Default to PostgreSQL, with SQLite as fallback for development
+default_database_url = 'postgresql://conduit:conduit@db:5432/conduit'
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-    }
+    'default': dj_database_url.config(
+        default=default_database_url,
+        conn_max_age=600
+    )
 }
 
 
@@ -131,10 +134,11 @@ STATIC_URL = '/static/'
 
 # CORS Configuration for Frontend (django-cors-headers 2.0.2)
 CORS_ORIGIN_ALLOW_ALL = False
-CORS_ORIGIN_WHITELIST = (
-    'http://localhost:8282',
-    'http://0.0.0.0:8282',
-    'http://91.99.193.112:8282',
+# Load CORS allowed origins from environment variable (comma-separated)
+CORS_ORIGIN_WHITELIST = tuple(
+    origin.strip() 
+    for origin in os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:8282').split(',')
+    if origin.strip()
 )
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = (
