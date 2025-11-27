@@ -84,11 +84,9 @@ WSGI_APPLICATION = 'conduit.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/1.10/ref/settings/#databases
 
-# Default to PostgreSQL, with SQLite as fallback for development
-default_database_url = 'postgresql://conduit:conduit@db:5432/conduit'
 DATABASES = {
     'default': dj_database_url.config(
-        default=default_database_url,
+        default=os.environ.get('DATABASE_URL', 'postgresql://conduit:conduit@db:5432/conduit'),
         conn_max_age=600
     )
 }
