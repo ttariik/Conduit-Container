@@ -17,8 +17,10 @@ the Angular frontend and Django REST backend provided by the
    - [Environment configuration](#environment-configuration)
    - [Build and run](#build-and-run)
    - [Logs and persistence](#logs-and-persistence)
-5. [Testing & Verification](#testing--verification)
-6. [Operational Notes](#operational-notes)
+5. [Automated Deployment](#automated-deployment)
+6. [Testing & Verification](#testing--verification)
+7. [Security Guidelines](#security-guidelines)
+8. [Operational Notes](#operational-notes)
 
 
 ## Repository Layout
@@ -127,6 +129,63 @@ docker logs conduit-backend > backend.log
 docker logs conduit-frontend > frontend.log
 ```
 
+## Automated Deployment
+
+The repository includes a GitHub Actions workflow (`.github/workflows/deployment.yaml`) that automates deployment to a cloud VM via SSH.
+
+### Workflow Configuration
+
+The workflow is triggered on:
+- Push to `main` or `conduit` branches
+- Manual workflow dispatch
+
+### Required GitHub Secrets
+
+Configure the following secrets in your GitHub repository settings (`Settings → Secrets and variables → Actions`):
+
+| Secret | Description |
+| ------ | ----------- |
+| `SSH_PRIVATE_KEY` | Private SSH key for server authentication (contents of your private key file). |
+| `VM_HOST` | Cloud VM IP address or hostname. |
+| `VM_USER` | SSH username for the cloud VM. |
+| `ENV_FILE` | Complete contents of your production `.env` file. |
+
+### Workflow Steps
+
+1. **Checkout**: Fetches the repository code including submodules.
+2. **SSH Setup**: Configures SSH authentication using the provided private key.
+3. **File Transfer**: Syncs all necessary files to the VM using `rsync` (excluding build artifacts, logs, node_modules).
+4. **Environment Setup**: Transfers the production `.env` configuration.
+5. **Build**: Builds Docker images on the VM (not in GitHub Actions).
+6. **Deploy**: Starts services in detached mode via `docker compose up -d`.
+7. **Health Check**: Waits for services to become healthy and verifies endpoints.
+8. **Verification**: Confirms backend API and frontend are accessible.
+9. **Cleanup on Failure**: Collects logs and stops containers if deployment fails.
+
+### Manual Deployment
+
+For manual deployment without CI/CD:
+
+```bash
+# Transfer files to VM
+rsync -avz --exclude='.git' --exclude='node_modules' \
+  ./ user@YOUR_VM_IP:~/conduit-deployment/
+
+# SSH into VM
+ssh user@YOUR_VM_IP
+
+# Navigate to deployment directory
+cd ~/conduit-deployment
+
+# Build and start services
+docker compose up -d --build
+
+# Verify services
+docker compose ps
+curl http://127.0.0.1:8000/api/tags/
+curl http://127.0.0.1:8282/
+```
+
 ## Testing & Verification
 
 Before submitting the project, confirm:
@@ -137,6 +196,36 @@ Before submitting the project, confirm:
 - Killing either container (`docker kill conduit-backend`) triggers an automatic
   restart because of `restart: unless-stopped`.
 - Logs can be tailed and persisted via `docker logs` or the mounted volumes.
+
+## Security Guidelines
+
+### Credential Management
+
+- **Never commit secrets** to the repository. All sensitive data (passwords, tokens, API keys, SSH keys) must be stored as environment variables or GitHub Secrets.
+- **Use `.env` files** for local development. The `.env` file is ignored by Git and must be created manually on each deployment target.
+- **GitHub Secrets** are used for CI/CD workflows. Store production credentials securely in repository settings.
+
+### Environment Variables
+
+All environment variables follow the naming convention: `UPPER_CASE_WITH_UNDERSCORE`
+
+When referencing variables in shell scripts or Docker Compose, always use the `${VARIABLE_NAME}` notation to prevent interpretation errors.
+
+### Network Security
+
+- **No hardcoded IP addresses** in the repository. Use environment variables for host configurations.
+- **CORS configuration** restricts allowed origins. Update `CORS_ALLOWED_ORIGINS` in `.env` for production domains.
+- **ALLOWED_HOSTS** in Django must be explicitly configured for production deployments.
+
+### Docker Security
+
+- **Multi-stage builds** minimize attack surface by excluding build dependencies from runtime images.
+- **Non-root users** are configured where possible to limit container privileges.
+- **Health checks** ensure services are monitored and restarted automatically on failure.
+
+### File Permissions
+
+The `.dockerignore` files prevent sensitive files (credentials, logs, caches) from being copied into Docker images during builds.
 
 ## Operational Notes
 

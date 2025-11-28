@@ -1,0 +1,150 @@
+name: Deploy Conduit to Cloud VM
+
+on:
+  push:
+    branches:
+      - main
+      - conduit
+  workflow_dispatch:
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  deploy:
+    name: Deploy to Cloud VM
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up SSH key
+        run: |
+          install -m 600 -D /dev/null ~/.ssh/id_rsa
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Verify SSH connection
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "echo 'SSH connection successful'" || {
+            echo "ERROR: SSH connection failed"
+            exit 1
+          }
+
+      - name: Create deployment directory on VM
+        run: |
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "mkdir -p ~/conduit-deployment" || {
+            echo "ERROR: Failed to create deployment directory"
+            exit 1
+          }
+
+      - name: Transfer files to VM
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='frontend/node_modules' \
+            --exclude='frontend/dist' \
+            --exclude='backend/__pycache__' \
+            --exclude='*.log' \
+            --exclude='.env' \
+            ./ ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:~/conduit-deployment/ || {
+            echo "ERROR: File transfer failed"
+            exit 1
+          }
+
+      - name: Transfer environment configuration
+        run: |
+          echo "${{ secrets.ENV_FILE }}" | ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cat > ~/conduit-deployment/.env" || {
+            echo "ERROR: Failed to transfer environment configuration"
+            exit 1
+          }
+
+      - name: Stop running containers
+        run: |
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd ~/conduit-deployment && docker compose down || true"
+
+      - name: Pull latest images and build
+        run: |
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd ~/conduit-deployment && docker compose pull || true" || {
+            echo "WARNING: Image pull failed, continuing with build"
+          }
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd ~/conduit-deployment && docker compose build --no-cache" || {
+            echo "ERROR: Build failed"
+            exit 1
+          }
+
+      - name: Start services in detached mode
+        run: |
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd ~/conduit-deployment && docker compose up -d" || {
+            echo "ERROR: Failed to start services"
+            exit 1
+          }
+
+      - name: Wait for services to be healthy
+        run: |
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
+            cd ~/conduit-deployment
+            echo 'Waiting for services to become healthy...'
+            for i in {1..30}; do
+              BACKEND_HEALTH=\$(docker inspect --format='{{.State.Health.Status}}' conduit-backend 2>/dev/null || echo 'not_found')
+              FRONTEND_STATUS=\$(docker inspect --format='{{.State.Status}}' conduit-frontend 2>/dev/null || echo 'not_found')
+              
+              echo \"Attempt \$i/30: Backend health: \$BACKEND_HEALTH, Frontend status: \$FRONTEND_STATUS\"
+              
+              if [ \"\$BACKEND_HEALTH\" = 'healthy' ] && [ \"\$FRONTEND_STATUS\" = 'running' ]; then
+                echo 'All services are ready'
+                exit 0
+              fi
+              
+              sleep 10
+            done
+            
+            echo 'ERROR: Services did not become healthy in time'
+            docker compose ps
+            docker compose logs --tail=50
+            exit 1
+          " || {
+            echo "ERROR: Health check failed"
+            exit 1
+          }
+
+      - name: Verify deployment
+        run: |
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
+            echo 'Verifying deployment...'
+            curl -f http://127.0.0.1:8000/api/tags/ > /dev/null || {
+              echo 'ERROR: Backend health check failed'
+              exit 1
+            }
+            curl -f http://127.0.0.1:8282/ > /dev/null || {
+              echo 'ERROR: Frontend health check failed'
+              exit 1
+            }
+            echo 'Deployment verification successful'
+          " || {
+            echo "ERROR: Deployment verification failed"
+            exit 1
+          }
+
+      - name: Display service status
+        if: success()
+        run: |
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd ~/conduit-deployment && docker compose ps"
+
+      - name: Cleanup on failure
+        if: failure()
+        run: |
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
+            cd ~/conduit-deployment
+            echo 'Deployment failed. Collecting logs...'
+            docker compose logs --tail=100
+            echo 'Stopping failed deployment...'
+            docker compose down
+          " || true
+

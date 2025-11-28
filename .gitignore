@@ -25,3 +25,7 @@ tmp/
 # Runtime-generated frontend environment configuration
 frontend/src/assets/env-config.js
 
+# Project checklists and internal documentation
+Conduit-Container-Checkliste.pdf
+Conduit-Deployment-Checkliste.pdf
+
