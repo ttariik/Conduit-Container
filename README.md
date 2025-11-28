@@ -215,18 +215,31 @@ GUNICORN_TIMEOUT=30
 - Verify `DJANGO_DEBUG=False` for production
 - Update `DJANGO_ALLOWED_HOSTS` with your actual VM IP
 - Update `CORS_ALLOWED_ORIGINS` with your actual frontend URL
+- Set `GITHUB_REPOSITORY` to your repository (lowercase, e.g., `ttariik/conduit-container`)
+- Set `IMAGE_TAG` to match your branch name (e.g., `conduit` or `main`)
 
 ### Workflow Steps
 
+**Build Job (runs in GitHub Actions):**
 1. **Checkout**: Fetches the repository code including submodules.
+2. **Docker Buildx Setup**: Configures multi-platform build support.
+3. **Registry Login**: Authenticates to GitHub Container Registry (ghcr.io).
+4. **Build Backend**: Builds backend Docker image with caching.
+5. **Push Backend**: Pushes backend image to registry.
+6. **Build Frontend**: Builds frontend Docker image with caching.
+7. **Push Frontend**: Pushes frontend image to registry.
+
+**Deploy Job (runs on Cloud VM):**
+1. **Checkout**: Fetches deployment configuration.
 2. **SSH Setup**: Configures SSH authentication using the provided private key.
-3. **File Transfer**: Syncs all necessary files to the VM using `rsync` (excluding build artifacts, logs, node_modules).
+3. **File Transfer**: Syncs necessary files to the VM using `rsync`.
 4. **Environment Setup**: Transfers the production `.env` configuration.
-5. **Build**: Builds Docker images on the VM (not in GitHub Actions).
-6. **Deploy**: Starts services in detached mode via `docker compose up -d`.
-7. **Health Check**: Waits for services to become healthy and verifies endpoints.
-8. **Verification**: Confirms backend API and frontend are accessible.
-9. **Cleanup on Failure**: Collects logs and stops containers if deployment fails.
+5. **Registry Login**: Authenticates VM to GitHub Container Registry.
+6. **Pull Images**: Downloads pre-built images from registry (no build on VM).
+7. **Deploy**: Starts services in detached mode via `docker compose up -d`.
+8. **Health Check**: Waits for services to become healthy and verifies endpoints.
+9. **Verification**: Confirms backend API and frontend are accessible.
+10. **Cleanup on Failure**: Collects logs and stops containers if deployment fails.
 
 ### Manual Deployment
 
@@ -252,11 +265,27 @@ curl http://127.0.0.1:8000/api/tags/
 curl http://127.0.0.1:8282/
 ```
 
+### Container Registry Setup
+
+The workflow uses GitHub Container Registry (ghcr.io) to store Docker images. After the first deployment:
+
+1. Go to your repository on GitHub
+2. Navigate to `Packages` (on the right sidebar)
+3. For each package (`conduit-container-backend` and `conduit-container-frontend`):
+   - Click on the package
+   - Go to `Package settings`
+   - Scroll to `Danger Zone` → `Change package visibility`
+   - Set to `Public` (or grant VM access to private packages)
+
+**Note:** The `GITHUB_TOKEN` secret has `packages: write` permission automatically in GitHub Actions.
+
 ### Triggering Deployments
 
 **Automatic trigger:**
 - Push a commit to the `conduit` or `main` branch
-- Check the `Actions` tab in your GitHub repository for workflow execution
+- The workflow builds images in GitHub Actions (not on VM)
+- Pre-built images are pushed to GitHub Container Registry
+- VM pulls and deploys the pre-built images
 
 **Manual trigger:**
 1. Go to `Actions` tab

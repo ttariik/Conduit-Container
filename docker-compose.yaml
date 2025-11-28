@@ -22,6 +22,7 @@ services:
 
   backend:
     container_name: conduit-backend
+    image: ghcr.io/${GITHUB_REPOSITORY:-ttariik/conduit-container}-backend:${IMAGE_TAG:-conduit}
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -59,6 +60,7 @@ services:
 
   frontend:
     container_name: conduit-frontend
+    image: ghcr.io/${GITHUB_REPOSITORY:-ttariik/conduit-container}-frontend:${IMAGE_TAG:-conduit}
     build:
       context: .
       dockerfile: Dockerfile.frontend
