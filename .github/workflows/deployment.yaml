@@ -147,16 +147,23 @@ jobs:
             exit 1
           }
 
-      - name: Stop and remove old containers
+      - name: Stop and remove old containers and images
         run: |
           ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
             cd ~/conduit-deployment || true
-            # Stop and remove containers by name
+            # Stop and remove containers
             docker stop conduit-backend conduit-frontend conduit-db 2>/dev/null || true
             docker rm conduit-backend conduit-frontend conduit-db 2>/dev/null || true
-            # Also try docker-compose down
             docker-compose down 2>/dev/null || true
-            echo 'Old containers cleaned up'
+            
+            # Remove old images to force fresh pull
+            docker rmi ghcr.io/ttariik/conduit-container-backend:conduit 2>/dev/null || true
+            docker rmi ghcr.io/ttariik/conduit-container-frontend:conduit 2>/dev/null || true
+            
+            # Clean up dangling images
+            docker image prune -f || true
+            
+            echo 'Old containers and images cleaned up'
           "
 
       - name: Pull latest images from registry
