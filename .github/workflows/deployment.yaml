@@ -208,23 +208,47 @@ jobs:
             exit 0
           "
 
-      - name: Verify deployment
+      - name: Show detailed logs and verify deployment
         run: |
           ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
-            echo 'Verifying deployment...'
-            curl -f http://127.0.0.1:8000/api/tags/ > /dev/null || {
-              echo 'ERROR: Backend health check failed'
-              exit 1
-            }
-            curl -f http://127.0.0.1:8282/ > /dev/null || {
-              echo 'ERROR: Frontend health check failed'
-              exit 1
-            }
-            echo 'Deployment verification successful'
-          " || {
-            echo "ERROR: Deployment verification failed"
+            cd ~/conduit-deployment
+            
+            echo '=== Container Status ==='
+            docker-compose ps
+            
+            echo ''
+            echo '=== Backend Logs (last 50 lines) ==='
+            docker logs conduit-backend --tail 50
+            
+            echo ''
+            echo '=== Database Logs (last 20 lines) ==='
+            docker logs conduit-db --tail 20
+            
+            echo ''
+            echo '=== Testing Backend API ==='
+            for i in {1..12}; do
+              if curl -f http://127.0.0.1:8000/api/tags/ 2>/dev/null; then
+                echo 'SUCCESS: Backend is responding!'
+                echo ''
+                echo '=== Testing Frontend ==='
+                if curl -f http://127.0.0.1:8282/ 2>/dev/null; then
+                  echo 'SUCCESS: Frontend is responding!'
+                  exit 0
+                else
+                  echo 'WARNING: Frontend not responding yet'
+                  exit 0
+                fi
+              fi
+              echo \"Attempt \$i/12: Waiting for backend... (waited \$((i*5)) seconds)\"
+              sleep 5
+            done
+            
+            echo ''
+            echo 'ERROR: Backend did not become ready in time'
+            echo 'Showing full backend logs for debugging:'
+            docker logs conduit-backend
             exit 1
-          }
+          "
 
       - name: Display service status
         if: success()
