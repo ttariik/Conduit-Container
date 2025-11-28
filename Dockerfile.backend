@@ -16,12 +16,14 @@ RUN apt-get update \
 COPY backend/ /srv/app
 
 # Install dependencies if requirements.txt exists
-RUN pip install --upgrade pip setuptools wheel \
-    && if [ -f requirements.txt ]; then \
-         pip install --prefix=/python -r requirements.txt; \
-       else \
-         echo "No requirements.txt detected; skipping dependency install"; \
-       fi
+RUN pip install --upgrade pip setuptools wheel && \
+    if [ -f requirements.txt ]; then \
+      echo "Found requirements.txt, installing dependencies..." && \
+      cat requirements.txt && \
+      pip install --prefix=/python -r requirements.txt --verbose; \
+    else \
+      echo "ERROR: No requirements.txt detected!" && exit 1; \
+    fi
 
 FROM python:${PYTHON_VERSION} AS runtime
 
