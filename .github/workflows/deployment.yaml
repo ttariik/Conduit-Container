@@ -149,14 +149,14 @@ jobs:
 
       - name: Stop running containers
         run: |
-          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd ~/conduit-deployment && docker compose down || true"
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd ~/conduit-deployment && docker-compose down || true"
 
       - name: Pull latest images from registry
         run: |
           ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
             cd ~/conduit-deployment
-            export IMAGE_TAG=${GITHUB_REF##*/}
-            docker compose pull
+            export IMAGE_TAG=\${GITHUB_REF##*/}
+            docker-compose pull
           " || {
             echo "ERROR: Failed to pull images from registry"
             exit 1
@@ -166,8 +166,8 @@ jobs:
         run: |
           ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
             cd ~/conduit-deployment
-            export IMAGE_TAG=${GITHUB_REF##*/}
-            docker compose up -d
+            export IMAGE_TAG=\${GITHUB_REF##*/}
+            docker-compose up -d
           " || {
             echo "ERROR: Failed to start services"
             exit 1
@@ -193,8 +193,8 @@ jobs:
             done
             
             echo 'ERROR: Services did not become healthy in time'
-            docker compose ps
-            docker compose logs --tail=50
+            docker-compose ps
+            docker-compose logs --tail=50
             exit 1
           " || {
             echo "ERROR: Health check failed"
@@ -222,7 +222,7 @@ jobs:
       - name: Display service status
         if: success()
         run: |
-          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd ~/conduit-deployment && docker compose ps"
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd ~/conduit-deployment && docker-compose ps"
 
       - name: Cleanup on failure
         if: failure()
@@ -230,8 +230,8 @@ jobs:
           ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
             cd ~/conduit-deployment
             echo 'Deployment failed. Collecting logs...'
-            docker compose logs --tail=100
+            docker-compose logs --tail=100
             echo 'Stopping failed deployment...'
-            docker compose down
+            docker-compose down
           " || true
 
