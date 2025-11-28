@@ -72,8 +72,7 @@ services:
       API_URL: ${API_URL:-http://localhost:8000/api}
       PRODUCTION: ${FRONTEND_PRODUCTION:-true}
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     ports:
       - "${FRONTEND_PORT:-8282}:8080"
     volumes:
