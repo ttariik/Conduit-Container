@@ -58,8 +58,9 @@ jobs:
           labels: ${{ steps.meta-backend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          no-cache: true
           build-args: |
-            PYTHON_VERSION=3.11-slim
+            PYTHON_VERSION=3.9-slim
 
       - name: Extract metadata for frontend
         id: meta-frontend
