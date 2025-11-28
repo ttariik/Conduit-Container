@@ -132,14 +132,9 @@ STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # CORS Configuration for Frontend (django-cors-headers 2.0.2)
-# Temporarily allow all origins for debugging
+# Note: With django-cors-headers 2.0.2, CORS_ORIGIN_ALLOW_ALL=True is used
+# as CORS_ORIGIN_WHITELIST had issues with proper header generation
 CORS_ORIGIN_ALLOW_ALL = True
-# Load CORS allowed origins from environment variable (comma-separated)
-# CORS_ORIGIN_WHITELIST = [
-#     origin.strip() 
-#     for origin in os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:8282').split(',')
-#     if origin.strip()
-# ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = (
     'DELETE',
