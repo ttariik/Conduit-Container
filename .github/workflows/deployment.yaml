@@ -151,19 +151,28 @@ jobs:
         run: |
           ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
             cd ~/conduit-deployment || true
-            # Stop and remove containers
-            docker stop conduit-backend conduit-frontend conduit-db 2>/dev/null || true
-            docker rm conduit-backend conduit-frontend conduit-db 2>/dev/null || true
-            docker-compose down 2>/dev/null || true
             
-            # Remove old images to force fresh pull
+            # Force stop and remove all containers with these names
+            docker stop conduit-backend conduit-frontend conduit-db 2>/dev/null || true
+            docker rm -f conduit-backend conduit-frontend conduit-db 2>/dev/null || true
+            
+            # Try docker-compose down
+            docker-compose down -v 2>/dev/null || true
+            
+            # Remove any remaining containers matching the names (even with different IDs)
+            docker ps -a --filter 'name=conduit-backend' -q | xargs -r docker rm -f 2>/dev/null || true
+            docker ps -a --filter 'name=conduit-frontend' -q | xargs -r docker rm -f 2>/dev/null || true
+            docker ps -a --filter 'name=conduit-db' -q | xargs -r docker rm -f 2>/dev/null || true
+            
+            # Remove old images
             docker rmi ghcr.io/ttariik/conduit-container-backend:conduit 2>/dev/null || true
             docker rmi ghcr.io/ttariik/conduit-container-frontend:conduit 2>/dev/null || true
             
-            # Clean up dangling images
+            # Clean up
             docker image prune -f || true
+            docker network prune -f || true
             
-            echo 'Old containers and images cleaned up'
+            echo 'Cleanup completed successfully'
           "
 
       - name: Pull latest images from registry
