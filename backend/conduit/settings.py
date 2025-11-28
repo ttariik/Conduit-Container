@@ -129,6 +129,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/1.10/howto/static-files/
 
 STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # CORS Configuration for Frontend (django-cors-headers 2.0.2)
 CORS_ORIGIN_ALLOW_ALL = False
