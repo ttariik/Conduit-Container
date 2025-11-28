@@ -147,9 +147,17 @@ jobs:
             exit 1
           }
 
-      - name: Stop running containers
+      - name: Stop and remove old containers
         run: |
-          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd ~/conduit-deployment && docker-compose down || true"
+          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
+            cd ~/conduit-deployment || true
+            # Stop and remove containers by name
+            docker stop conduit-backend conduit-frontend conduit-db 2>/dev/null || true
+            docker rm conduit-backend conduit-frontend conduit-db 2>/dev/null || true
+            # Also try docker-compose down
+            docker-compose down 2>/dev/null || true
+            echo 'Old containers cleaned up'
+          "
 
       - name: Pull latest images from registry
         run: |
