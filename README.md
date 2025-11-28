@@ -143,12 +143,78 @@ The workflow is triggered on:
 
 Configure the following secrets in your GitHub repository settings (`Settings → Secrets and variables → Actions`):
 
-| Secret | Description |
-| ------ | ----------- |
-| `SSH_PRIVATE_KEY` | Private SSH key for server authentication (contents of your private key file). |
-| `VM_HOST` | Cloud VM IP address or hostname. |
-| `VM_USER` | SSH username for the cloud VM. |
-| `ENV_FILE` | Complete contents of your production `.env` file. |
+#### 1. SSH_PRIVATE_KEY
+
+Private SSH key for server authentication.
+
+Obtain the key:
+```bash
+cat ~/.ssh/v_server_key
+```
+
+Copy the entire output including the header and footer:
+```
+-----BEGIN OPENSSH PRIVATE KEY-----
+...
+-----END OPENSSH PRIVATE KEY-----
+```
+
+**Security note:** Never commit this key to the repository.
+
+#### 2. VM_HOST
+
+Cloud VM IP address or hostname (e.g., `203.0.113.42`).
+
+#### 3. VM_USER
+
+SSH username for the cloud VM (e.g., `tsabanovic`).
+
+#### 4. ENV_FILE
+
+Complete contents of your production `.env` file. Copy `env.example` as a template and update all values:
+
+```bash
+# Frontend configuration
+FRONTEND_PORT=8282
+API_URL=http://YOUR_VM_IP:8000/api
+FRONTEND_BUILD_CONFIGURATION=production
+FRONTEND_PRODUCTION=true
+
+# Backend configuration
+BACKEND_PORT=8000
+BACKEND_PYTHON_VERSION=3.11-slim
+DJANGO_ALLOWED_HOSTS=YOUR_VM_IP,127.0.0.1,localhost
+DJANGO_SECRET_KEY=YOUR_SECURE_RANDOM_SECRET_KEY
+DJANGO_DEBUG=False
+DJANGO_MANAGEPY_MAKEMIGRATIONS=0
+DJANGO_MANAGEPY_MIGRATE=1
+DJANGO_MANAGEPY_COLLECTSTATIC=1
+DJANGO_SUPERUSER_EMAIL=YOUR_ADMIN_EMAIL
+DJANGO_SUPERUSER_USERNAME=admin
+DJANGO_SUPERUSER_PASSWORD=YOUR_SECURE_PASSWORD
+
+# CORS configuration
+CORS_ALLOWED_ORIGINS=http://YOUR_VM_IP:8282
+
+# Database configuration
+POSTGRES_DB=conduit
+POSTGRES_USER=conduit
+POSTGRES_PASSWORD=YOUR_SECURE_DB_PASSWORD
+POSTGRES_PORT=5432
+DATABASE_URL=postgresql://conduit:YOUR_SECURE_DB_PASSWORD@db:5432/conduit
+
+# Logging
+GUNICORN_LOG_LEVEL=info
+GUNICORN_TIMEOUT=30
+```
+
+**Production security checklist:**
+- Replace `YOUR_VM_IP` with actual VM IP address
+- Generate a strong `DJANGO_SECRET_KEY` (min. 50 random characters): `python3 -c "import secrets; print(secrets.token_urlsafe(50))"`
+- Set secure passwords for `DJANGO_SUPERUSER_PASSWORD` and `POSTGRES_PASSWORD` (min. 16 characters)
+- Verify `DJANGO_DEBUG=False` for production
+- Update `DJANGO_ALLOWED_HOSTS` with your actual VM IP
+- Update `CORS_ALLOWED_ORIGINS` with your actual frontend URL
 
 ### Workflow Steps
 
@@ -185,6 +251,41 @@ docker compose ps
 curl http://127.0.0.1:8000/api/tags/
 curl http://127.0.0.1:8282/
 ```
+
+### Triggering Deployments
+
+**Automatic trigger:**
+- Push a commit to the `conduit` or `main` branch
+- Check the `Actions` tab in your GitHub repository for workflow execution
+
+**Manual trigger:**
+1. Go to `Actions` tab
+2. Select `Deploy Conduit to Cloud VM` workflow
+3. Click `Run workflow`
+4. Select the branch and click `Run workflow`
+
+### Troubleshooting Deployment Issues
+
+**SSH Connection Failed:**
+- Verify `SSH_PRIVATE_KEY` is correctly copied (including header/footer)
+- Verify `VM_HOST` and `VM_USER` are correct
+- Ensure firewall allows SSH connections (port 22)
+
+**Build Failed:**
+- Check Docker is installed on the VM
+- Verify sufficient disk space on VM
+- Review build logs in the Actions tab
+
+**Services Unhealthy:**
+- Check backend logs: `docker logs conduit-backend`
+- Verify database is running: `docker ps`
+- Check environment variables are correctly set
+- Verify ports 8000 and 8282 are not already in use
+
+**Deployment Verification Failed:**
+- Ensure firewall allows traffic on ports 8000 and 8282
+- Check services are running: `docker compose ps`
+- Test endpoints manually from VM: `curl http://127.0.0.1:8000/api/tags/`
 
 ## Testing & Verification
 
@@ -226,6 +327,14 @@ When referencing variables in shell scripts or Docker Compose, always use the `$
 ### File Permissions
 
 The `.dockerignore` files prevent sensitive files (credentials, logs, caches) from being copied into Docker images during builds.
+
+### Security Best Practices
+
+1. **Rotate secrets regularly** (every 90 days minimum)
+2. **Use strong passwords** (min. 16 characters, mixed case, numbers, symbols)
+3. **Limit SSH key access** (use dedicated deployment key, not personal key)
+4. **Monitor deployment logs** for suspicious activity
+5. **Keep dependencies updated** regularly for security patches
 
 ## Operational Notes
 
