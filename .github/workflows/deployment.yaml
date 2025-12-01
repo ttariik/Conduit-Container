@@ -132,16 +132,9 @@ jobs:
         run: |
           ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Create deployment directory on VM
-        run: |
-          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "mkdir -p ~/conduit-deployment" || {
-            echo "ERROR: Failed to create deployment directory"
-            exit 1
-          }
-
       - name: Transfer deployment files to VM
         run: |
-          scp docker-compose.yaml ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:~/conduit-deployment/ || {
+          rsync -avz docker-compose.yaml ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:~/conduit-deployment/ || {
             echo "ERROR: Failed to transfer docker-compose.yaml"
             exit 1
           }
