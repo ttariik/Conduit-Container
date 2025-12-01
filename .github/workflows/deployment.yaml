@@ -123,168 +123,38 @@ jobs:
           name: deployment-files
           path: .
 
-      - name: Set up SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Add VM host to known hosts
-        run: |
-          ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
-
       - name: Transfer deployment files to VM
-        run: |
-          rsync -avz docker-compose.yaml ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:~/conduit-deployment/ || {
-            echo "ERROR: Failed to transfer docker-compose.yaml"
-            exit 1
-          }
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-compose.yaml"
+          target: "~/conduit-deployment/"
 
-      - name: Transfer environment configuration
-        run: |
-          echo "${{ secrets.ENV_FILE }}" | ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cat > ~/conduit-deployment/.env" || {
-            echo "ERROR: Failed to transfer environment configuration"
-            exit 1
-          }
-
-      - name: Log in to Container Registry on VM
-        run: |
-          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "echo ${{ secrets.GITHUB_TOKEN }} | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin" || {
-            echo "ERROR: Failed to log in to container registry"
-            exit 1
-          }
-
-      - name: Stop and remove old containers and images
-        run: |
-          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
-            cd ~/conduit-deployment || true
-            
-            # Force stop and remove all containers with these names
-            docker stop conduit-backend conduit-frontend conduit-db 2>/dev/null || true
-            docker rm -f conduit-backend conduit-frontend conduit-db 2>/dev/null || true
-            
-            # Try docker-compose down
-            docker-compose down -v 2>/dev/null || true
-            
-            # Remove any remaining containers matching the names (even with different IDs)
-            docker ps -a --filter 'name=conduit-backend' -q | xargs -r docker rm -f 2>/dev/null || true
-            docker ps -a --filter 'name=conduit-frontend' -q | xargs -r docker rm -f 2>/dev/null || true
-            docker ps -a --filter 'name=conduit-db' -q | xargs -r docker rm -f 2>/dev/null || true
-            
-            # Remove old images
-            docker rmi ghcr.io/ttariik/conduit-container-backend:conduit 2>/dev/null || true
-            docker rmi ghcr.io/ttariik/conduit-container-frontend:conduit 2>/dev/null || true
-            
-            # Clean up
-            docker image prune -f || true
-            docker network prune -f || true
-            
-            echo 'Cleanup completed successfully'
-          "
-
-      - name: Pull latest images from registry
-        run: |
-          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
+      - name: Deploy to VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
             cd ~/conduit-deployment
-            export IMAGE_TAG=\${GITHUB_REF##*/}
+            
+            echo "${{ secrets.ENV_FILE }}" > .env
+            
+            echo "=== Pulling latest images ==="
             docker-compose pull
-          " || {
-            echo "ERROR: Failed to pull images from registry"
-            exit 1
-          }
-
-      - name: Start services in detached mode
-        run: |
-          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
-            cd ~/conduit-deployment
-            export IMAGE_TAG=\${GITHUB_REF##*/}
+            
+            echo "=== Stopping containers ==="
+            docker-compose down -v
+            
+            echo "=== Starting containers ==="
             docker-compose up -d
-          " || {
-            echo "ERROR: Failed to start services"
-            exit 1
-          }
-
-      - name: Wait for services to start and check logs
-        run: |
-          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
-            cd ~/conduit-deployment
-            echo 'Waiting for services to start...'
-            sleep 30
             
-            echo '=== Service Status ==='
+            echo "=== Cleanup old images ==="
+            docker image prune -af
+            
+            echo "=== Deployment completed ==="
             docker-compose ps
-            
-            echo '=== Backend Logs ==='
-            docker logs conduit-backend --tail 100
-            
-            echo '=== Checking if backend is responding ==='
-            for i in {1..20}; do
-              if curl -f http://127.0.0.1:8000/api/tags/ 2>/dev/null; then
-                echo 'Backend is responding!'
-                exit 0
-              fi
-              echo \"Attempt \$i/20: Backend not yet responding...\"
-              sleep 5
-            done
-            
-            echo 'WARNING: Backend may not be fully ready yet'
-            exit 0
-          "
-
-      - name: Show detailed logs and verify deployment
-        run: |
-          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
-            cd ~/conduit-deployment
-            
-            echo '=== Container Status ==='
-            docker-compose ps
-            
-            echo ''
-            echo '=== Backend Logs (last 50 lines) ==='
-            docker logs conduit-backend --tail 50
-            
-            echo ''
-            echo '=== Database Logs (last 20 lines) ==='
-            docker logs conduit-db --tail 20
-            
-            echo ''
-            echo '=== Testing Backend API ==='
-            for i in {1..12}; do
-              if curl -f http://127.0.0.1:8000/api/tags/ 2>/dev/null; then
-                echo 'SUCCESS: Backend is responding!'
-                echo ''
-                echo '=== Testing Frontend ==='
-                if curl -f http://127.0.0.1:8282/ 2>/dev/null; then
-                  echo 'SUCCESS: Frontend is responding!'
-                  exit 0
-                else
-                  echo 'WARNING: Frontend not responding yet'
-                  exit 0
-                fi
-              fi
-              echo \"Attempt \$i/12: Waiting for backend... (waited \$((i*5)) seconds)\"
-              sleep 5
-            done
-            
-            echo ''
-            echo 'ERROR: Backend did not become ready in time'
-            echo 'Showing full backend logs for debugging:'
-            docker logs conduit-backend
-            exit 1
-          "
-
-      - name: Display service status
-        if: success()
-        run: |
-          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "cd ~/conduit-deployment && docker-compose ps"
-
-      - name: Cleanup on failure
-        if: failure()
-        run: |
-          ssh ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "
-            cd ~/conduit-deployment
-            echo 'Deployment failed. Collecting logs...'
-            docker-compose logs --tail=100
-            echo 'Stopping failed deployment...'
-            docker-compose down
-          " || true
 
