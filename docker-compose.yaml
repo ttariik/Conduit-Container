@@ -23,11 +23,6 @@ services:
   backend:
     container_name: conduit-backend
     image: ghcr.io/${GITHUB_REPOSITORY:-ttariik/conduit-container}-backend:${IMAGE_TAG:-conduit}
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
-      args:
-        PYTHON_VERSION: ${BACKEND_PYTHON_VERSION:-3.11-slim}
     env_file:
       - .env
     environment:
@@ -61,11 +56,6 @@ services:
   frontend:
     container_name: conduit-frontend
     image: ghcr.io/${GITHUB_REPOSITORY:-ttariik/conduit-container}-frontend:${IMAGE_TAG:-conduit}
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-      args:
-        FRONTEND_BUILD_CONFIGURATION: ${FRONTEND_BUILD_CONFIGURATION:-production}
     env_file:
       - .env
     environment:
