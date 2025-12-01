@@ -1,0 +1,77 @@
+services:
+  db:
+    container_name: conduit-db
+    image: postgres:13-alpine
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-conduit}
+      POSTGRES_USER: ${POSTGRES_USER:-conduit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-conduit}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-conduit} -d ${POSTGRES_DB:-conduit}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  backend:
+    container_name: conduit-backend
+    image: ghcr.io/${GITHUB_REPOSITORY:-ttariik/conduit-container}-backend:${IMAGE_TAG:-conduit}
+    env_file:
+      - .env
+    environment:
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-*}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-False}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-conduit}:${POSTGRES_PASSWORD:-conduit}@db:5432/${POSTGRES_DB:-conduit}}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8282}
+      DJANGO_MANAGEPY_MAKEMIGRATIONS: ${DJANGO_MANAGEPY_MAKEMIGRATIONS:-0}
+      DJANGO_MANAGEPY_MIGRATE: ${DJANGO_MANAGEPY_MIGRATE:-1}
+      DJANGO_MANAGEPY_COLLECTSTATIC: ${DJANGO_MANAGEPY_COLLECTSTATIC:-1}
+      DJANGO_SUPERUSER_EMAIL: ${DJANGO_SUPERUSER_EMAIL:-}
+      DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-admin}
+      DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - backend_data:/app/data
+      - backend_logs:/var/log/conduit
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8000/api/tags/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+  frontend:
+    container_name: conduit-frontend
+    image: ghcr.io/${GITHUB_REPOSITORY:-ttariik/conduit-container}-frontend:${IMAGE_TAG:-conduit}
+    env_file:
+      - .env
+    environment:
+      API_URL: ${API_URL:-http://localhost:8000/api}
+      PRODUCTION: ${FRONTEND_PRODUCTION:-true}
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-8282}:8080"
+    volumes:
+      - frontend_logs:/var/log/nginx
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  backend_data:
+  backend_logs:
+  frontend_logs:
+

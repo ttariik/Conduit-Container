@@ -1,0 +1,31 @@
+.DS_Store
+*.log
+*.tmp
+*.swp
+*.swo
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+build/
+coverage/
+frontend/node_modules/
+frontend/dist/
+backend/.venv/
+backend/venv/
+backend/__pycache__/
+backend/*.sqlite3
+.pytest_cache/
+.mypy_cache/
+.idea/
+.vscode/
+tmp/
+
+# Runtime-generated frontend environment configuration
+frontend/src/assets/env-config.js
+
+# Project checklists and internal documentation
+Conduit-Container-Checkliste.pdf
+Conduit-Deployment-Checkliste.pdf
+
